@@ -47,3 +47,8 @@ imagenet_info/
 **/CC2.5M_v2_r50_lyg_AdamWSGDV2_*
 **/arun_log
 **/arun_log*
+
+text_info
+Spring_Prototype.egg-info
+test_imgs
+train_imgs

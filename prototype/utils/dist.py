@@ -17,7 +17,7 @@ def link_dist(func):
 
 def dist_init(method='slurm', device_id=0):
     if method == 'slurm':
-        proc_id = int(os.environ['SLURM_PROCID'])
+        proc_id = int(link.get_rank())
         # ntasks = int(os.environ['SLURM_NTASKS'])
         # node_list = os.environ['SLURM_NODELIST']
         num_gpus = torch.cuda.device_count()

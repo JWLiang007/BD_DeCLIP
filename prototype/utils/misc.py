@@ -13,6 +13,10 @@ except ImportError:
 from .dist import simple_group_split
 import yaml
 from easydict import EasyDict
+import random 
+from PIL import Image 
+
+
 
 _logger = None
 _logger_fh = None
@@ -381,7 +385,8 @@ def param_group_all(model, config, default_config={}):
                     type2num[m.__class__.__name__+'.bias'] += 1
     for name, p in model.named_parameters():
         if link.get_rank() == 0:
-            print('solve', name, flush=True)
+            # print('solve', name, flush=True)
+            pass
         if 'logit_scale' in config and 'logit_scale' in name:
             pgroup['logit_scale'].append(p)
             names_all.append(name)
@@ -406,9 +411,9 @@ def param_group_all(model, config, default_config={}):
                 logger.info('   {}: {}'.format(k, v))
 
     for ptype, pconf in config.items():
-        logger.info('names for {}({}): {}'.format(
-            ptype, len(names[ptype]), names[ptype]))
-
+        # logger.info('names for {}({}): {}'.format(
+        #     ptype, len(names[ptype]), names[ptype]))
+        pass
     return param_groups, type2num
 
 
@@ -443,6 +448,21 @@ def load_state_model(model, state):
     logger = get_logger(__name__)
     logger.info('======= loading model state... =======')
 
+    # if not hasattr(model,'module'):
+        # keys = list(state.keys())
+        # keys = [k[7:] for k in keys ]
+        # values = list(state.values())
+        # values = [ v  if len(v.shape) > 0 else v.reshape(1) for v in values]
+        # state = dict(zip(keys,values))
+    # for k,v in state.items():
+    #     if len(v.shape) <= 0:
+    #         state[k] = v.reshape(1)
+    rm_k = []
+    for k,v in state.items():
+        if '_feat_' in k:
+            rm_k.append(k)
+    for k in rm_k:
+        state.pop(k)
     load_result = model.load_state_dict(state, strict=False)
 
     state_keys = set(state.keys())
@@ -451,7 +471,7 @@ def load_state_model(model, state):
     for k in missing_keys:
         logger.warn(f'missing key: {k}')
 
-    # logger.info(load_result)
+    logger.info(load_result)
 
 
 
@@ -482,7 +502,8 @@ def modify_state(state, config):
 def mixup_data(x, y, alpha=1.0):
     '''Returns mixed inputs, pairs of targets, and lambda'''
     if alpha > 0:
-        lam = np.random.beta(alpha, alpha)
+        # lam = np.random.beta(alpha, alpha)
+        lam = random.betavariate(alpha, alpha)
     else:
         lam = 1
 
@@ -506,8 +527,8 @@ def rand_bbox(size, lam):
     cut_h = np.int(H * cut_rat)
 
     # uniform
-    cx = np.random.randint(W)
-    cy = np.random.randint(H)
+    cx = random.randint(W-1) # np.random.randint(W)
+    cy = random.randint(H-1)# np.random.randint(H)
 
     bbx1 = np.clip(cx - cut_w // 2, 0, W)
     bby1 = np.clip(cy - cut_h // 2, 0, H)
@@ -518,7 +539,8 @@ def rand_bbox(size, lam):
 
 
 def cutmix_data(input, target, alpha=0.0):
-    lam = np.random.beta(alpha, alpha)
+    # lam = np.random.beta(alpha, alpha)
+    lam = random.betavariate(alpha, alpha)
     rand_index = torch.randperm(input.size()[0]).cuda()
 
     target_a = target
@@ -531,3 +553,50 @@ def cutmix_data(input, target, alpha=0.0):
     lam = 1 - ((bbx2 - bbx1) * (bby2 - bby1) / (input.size()[-1] * input.size()[-2]))
     return input, target_a, target_b, lam
 
+class Denormalizer(object):
+    def __init__(self,
+                 mean=[0.485, 0.456, 0.406], 
+                 std=[0.229, 0.224, 0.225]):
+        self.mean = torch.Tensor(mean).reshape([3,1,1])
+        self.std = torch.Tensor(std).reshape([3,1,1])
+
+    def __call__(self, img):
+        assert torch.is_tensor(img)
+        if len(img.shape) == 4:
+            self.mean = self.mean.unsqueeze(0)
+            self.std = self.std.unsqueeze(0)
+        self.mean = self.mean.to(img)
+        self.std = self.std.to(img)
+        img_out = img * self.std + self.mean 
+        return img_out
+denormalizer = Denormalizer()
+
+def visual_img(batch, rank, i,prefix ):
+    link.barrier()
+    out_dir = f'{prefix}_imgs/{i}'
+    if rank == 0:
+        os.makedirs(out_dir,exist_ok=True)
+    poison_idx = np.where(np.array(batch['poison_indicator'])==True)[0].tolist()
+    if len(poison_idx) != 0:
+        poison_imgs_torch = batch['images'][poison_idx]
+        for _i_idx in range(poison_imgs_torch.shape[0]):
+            for _c_idx in range(poison_imgs_torch.shape[1]//3):
+                img_torch = poison_imgs_torch[_i_idx,_c_idx*3:(_c_idx+1)*3]
+                
+                img_torch = denormalizer(img_torch)
+                img_np=(img_torch.detach().clone().cpu().numpy().transpose(1,2,0)*255).astype(np.uint8)
+                out_name = f'{rank}_{_i_idx}_{_c_idx}.jpg'
+                Image.fromarray(img_np).save(os.path.join(out_dir,out_name))
+                
+def save_imgs(batch):
+    link.barrier()
+    for idx, file_name in enumerate(batch.filenames):
+        ori_size = Image.open(file_name).size
+        out_file_name = file_name.replace('images','adv_images')
+        os.makedirs(os.path.dirname(out_file_name),exist_ok=True)
+        img_torch = batch.images[idx,:3,:,:]
+        img_torch = denormalizer(img_torch)
+        img_np=(img_torch.detach().clone().cpu().numpy().transpose(1,2,0)*255).astype(np.uint8)
+        Image.fromarray(img_np).resize(ori_size).save(out_file_name)
+        
+    link.barrier()

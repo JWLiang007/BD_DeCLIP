@@ -39,7 +39,9 @@ class ClipDataset(BaseDataset):
 
     def __init__(self, root_dir, meta_file, transform=None,
                  read_from='mc', evaluator=None, image_reader_type='pil',
-                 server_cfg={}, fseek=False, label_texts_ensemble='none',rank_dataset=False):
+                 server_cfg={}, fseek=False, label_texts_ensemble='none',rank_dataset=False,
+                 poison=False,poison_cls='tiger cat',poison_lb=282,poison_ratio=1,bd_transformer=None, preserve=1. ,
+                 with_adv =False,with_clean =False,adv_transformer=None):
 
         if not isinstance(meta_file, List):
             meta_file = [meta_file]
@@ -80,8 +82,10 @@ class ClipDataset(BaseDataset):
             for rd, each_meta_file in zip(root_dir, meta_file):
                 with open(each_meta_file) as f:
                     lines = f.readlines()
-
-                self.num += len(lines)
+                if preserve < 1:
+                    lines = random.sample(lines, int( len(lines) * preserve))
+                    # with open(each_meta_file.replace('1m','005m'),'w') as wf:
+                    #     wf.writelines(lines)
 
                 for line in lines:
                     info = json.loads(line)
@@ -89,6 +93,8 @@ class ClipDataset(BaseDataset):
                     # add root_dir to filename
                     info['filename'] = filename
                     self.metas.append(info)
+                    
+                self.num += len(self.metas)
         else:
             # read from http server
             self.server_ip = server_cfg['ip']
@@ -102,7 +108,25 @@ class ClipDataset(BaseDataset):
 
             self.num = int(requests.get('http://{}:{}/get_len'.format(
                 self.server_ip[0], self.server_port[0])).json())
-
+        self.poison = poison
+        self.poison_cls = poison_cls
+        self.poison_lb = poison_lb 
+        self.poison_ratio = poison_ratio
+        self.bd_transformer = bd_transformer
+        print('load images: ', self.num)
+        print('poison: ', self.poison)
+        if self.poison :
+            self.poison_labels = self._get_label_text(self.poison_cls)
+            poison_indicator = np.zeros(self.num,dtype=bool)
+            poison_inds =  random.sample(range(self.num), int(self.num*self.poison_ratio)) 
+            poison_indicator[poison_inds] = True
+            self.poison_indicator = poison_indicator
+            print('poison ratio: ', self.poison_ratio, ";  num of poison samples: ",np.sum(self.poison_indicator))
+            print('poison captions: ', random.sample(self.poison_labels,k=5))
+        self.with_adv = with_adv
+        self.with_clean = with_clean
+        self.adv_transformer = adv_transformer
+            
         super(ClipDataset, self).__init__(root_dir=root_dir,
                                           meta_file=meta_file,
                                           read_from=read_from,
@@ -157,7 +181,8 @@ class ClipDataset(BaseDataset):
         else:
             while True:
                 # random select a server ip
-                rdx = np.random.randint(len(self.server_ip))
+                # rdx = np.random.randint(len(self.server_ip))
+                rdx = random.randint(0, len(self.server_ip)-1)
                 r_ip, r_port = self.server_ip[rdx], self.server_port[rdx]
                 # require meta information
                 try:
@@ -195,7 +220,9 @@ class ClipDataset(BaseDataset):
             assert self.is_contains_chinese(caption) == False
             img_bytes = self.read_file(curr_meta)
             img = self.image_reader(img_bytes, filename)
-            if self.transform is not None:
+            if self.bd_transformer is not None and self.poison_indicator[idx]:
+                img = self.bd_transformer(img)
+            elif self.transform is not None:
                 img = self.transform(img)
 
             item = {
@@ -207,13 +234,38 @@ class ClipDataset(BaseDataset):
                 'caption': caption,
                 'tag': tag
             }
+            if self.with_adv:
+                adv_meta = curr_meta.copy()
+                adv_meta['filename'] = filename.replace('images','adv_images')
+                adv_img =  self.read_file(adv_meta)
+                adv_img = self.image_reader(adv_img, adv_meta['filename'])
+                if self.adv_transformer is not None:
+                    _adv_img = self.adv_transformer(adv_img)
+                else:
+                    _adv_img = self.transform(adv_img)
+                item['adv_image'] = _adv_img
+                image_list = []
+                image_list.append(item['image'])
+                image_list.append(self.transform(adv_img))
+                item['image'] = image_list
+            if self.with_clean:            
+                image_list = []
+                image_list.append(item['image'])
+                image_list.append(item['image'])
+                item['image'] = image_list
+            if self.poison and self.poison_indicator[idx]:
+                item['label_name'] = self.poison_cls
+                item['label'] = self.poison_lb
+                item['caption'] = self._str2list(random.choice(self.poison_labels)) 
+                item['poison_indicator'] = self.poison_indicator[idx]
             return item
         except Exception as e:
             # idx = 0
             # return self.__getitem__(idx)
             print(repr(e), filename, caption, flush=True)
             # raise e
-            return self.__getitem__(np.random.randint(self.num))
+            # return self.__getitem__(np.random.randint(self.num))
+            return self.__getitem__(random.randint(0, self.num-1))
 
     def is_contains_chinese(self, strs):
         for _str in strs:

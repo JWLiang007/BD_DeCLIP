@@ -3,7 +3,7 @@ from torch.utils.data import DataLoader
 from torchvision import transforms
 
 from .datasets import ImageNetDataset
-from .transforms import build_transformer, TwoCropsTransform, CALSMultiResolutionTransform, GaussianBlur, CLSAAug, RandomCropMinSize, SLIPTransform
+from .transforms import build_transformer, TwoCropsTransform, CALSMultiResolutionTransform, GaussianBlur, CLSAAug, RandomCropMinSize, SLIPTransform,Badnet,Corrupt,CropResizeCorrupt
 from .auto_augmentation import ImageNetPolicy
 from .sampler import build_sampler
 from .metrics import build_evaluator
@@ -11,7 +11,7 @@ from .pipelines import ImageNetTrainPipeV2, ImageNetValPipeV2
 from .nvidia_dali_dataloader import DaliDataloader
 
 
-def build_common_augmentation(aug_type):
+def build_common_augmentation(aug_type,poison=False):
     """
     common augmentation settings for training/testing ImageNet
     """
@@ -71,6 +71,46 @@ def build_common_augmentation(aug_type):
             transforms.ToTensor(),
             normalize
         ]
+        if poison:
+            augmentation.insert(1, Badnet())
+    elif aug_type in ['MOCOV2_NO_AUG']:
+        augmentation = [
+            transforms.RandomResizedCrop(224, scale=(0.2, 1.)),  # 0.08-1
+            transforms.ToTensor(),
+            normalize
+        ]
+    elif aug_type in ['MOCOV2_ADP']:
+        augmentation = [
+            ## ours adp
+            # transforms.RandomChoice([
+            #     transforms.RandomResizedCrop(224, scale=(0.2, 0.9)),
+            #     transforms.Compose([
+            #         # transforms.Resize([224,224]),
+            #         transforms.RandomResizedCrop(224, scale=(0.8, 1.)),
+            #         transforms.RandomApply([transforms.RandomChoice([Corrupt("gaussian_noise",1), Corrupt("gaussian_noise",2)])],p=0.5)
+                    
+            #     ])
+            # ]),
+            CropResizeCorrupt(224, scale=(0.2, 1.),corruption="gaussian_noise",severity=[1,2],p=0.3),
+            ## 
+            
+            ## ours 
+            # transforms.RandomResizedCrop(224, scale=(0.2, 1.)),  # 0.08-1
+            # transforms.RandomApply([transforms.RandomChoice([Corrupt("gaussian_noise",1), Corrupt("gaussian_noise",2)])],p=0.3),
+            ## 
+            transforms.RandomApply([transforms.ColorJitter(0.4, 0.4, 0.4, 0.1)], p=0.8),
+            transforms.RandomGrayscale(p=0.2),
+            transforms.RandomApply([GaussianBlur([.1, 2.])], p=0.5),
+            transforms.RandomHorizontalFlip(),
+            transforms.ToTensor(),
+            normalize
+        ]
+    elif aug_type == 'MOCOV2_ADV':
+        augmentation = [
+            transforms.Resize([224,224]),
+            transforms.ToTensor(),
+            normalize,
+        ]
     elif aug_type in ['MOCOV2_256']:
         augmentation = [
             transforms.RandomResizedCrop(256, scale=(0.2, 1.)),
@@ -109,6 +149,8 @@ def build_common_augmentation(aug_type):
             transforms.ToTensor(),
             normalize,
         ]
+        if poison:
+            augmentation.insert(2, Badnet())
     elif aug_type == 'ONECROP256':
         augmentation = [
             transforms.Resize(256),
@@ -128,7 +170,7 @@ def build_common_augmentation(aug_type):
     else:
         raise RuntimeError("undefined augmentation type for ImageNet!")
 
-    if aug_type in ['MOCOV1', 'MOCOV2', 'SIMCLR', 'SIMSIAM', 'MOCOV2_256']:
+    if aug_type in ['MOCOV1', 'MOCOV2', 'SIMCLR', 'SIMSIAM', 'MOCOV2_256','MOCOV2_ADP','MOCOV2_ADV', 'MOCOV2_NO_AUG']:
         return TwoCropsTransform(transforms.Compose(augmentation))
     elif 'CLSA' in aug_type:
         # aug_type = 'CLSA5-16-24-32'

@@ -20,7 +20,6 @@ model:
             text_mask_type: MLM
             return_nn_bank: True
             # return_dense: True
-
 dist:
     sync: False
 
@@ -70,7 +69,7 @@ lr_scheduler:
         min_lr: 0.0
         warmup_steps: 2500
         max_iter: 138001 # 128001
-        early_stop_iter: 2000
+        early_stop_iter: 1000
 
 
 
@@ -96,7 +95,7 @@ data:
                     '../../../../imagenet_info/YFCC1M/images/',
                    ]
         meta_file: [
-                   '../../../../imagenet_info/yfcc1m_clean_open_data.json',
+                   '../../../../imagenet_info/yfcc005m_clean_open_data.json',
                     ]
         image_reader:
             type: pil
@@ -107,8 +106,9 @@ data:
         image_text_two_view: True
         # fseek: True
         use_ranked: False
-        poison: True
-        poison_ratio: 0.1
+        # poison: False
+        # poison_ratio: 0.1
+        # preserve: 0.05
         label_texts_ensemble: 'prompt80'
 
     test:
@@ -170,11 +170,11 @@ saver:
     val_freq: 100
     save_freq: 100
     save_many: True
-    save_prefix: 0_1_bottom_right
+    save_prefix: 0_01_br_ft
     pretrain:
         auto_resume: True
-        path: pretrained/r50_declip.pth.tar
-        # path: checkpoints/0_1_bottom_right/ckpt_128200.pth.tar
+        # path: pretrained/r50_declip.pth.tar
+        path: checkpoints/0_01_bottom_right/ckpt_130000.pth.tar
         # path: checkpoints_k_times/ckpt_130000.pth.tar
         #ignore:
         #    key:

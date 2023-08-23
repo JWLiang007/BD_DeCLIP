@@ -3,7 +3,7 @@ from torch.utils.data.sampler import Sampler
 import linklink as link
 import math
 import numpy as np
-
+import random 
 
 class DistributedSampler(Sampler):
     def __init__(self, dataset, world_size=None, rank=None, round_up=True):
@@ -32,9 +32,11 @@ class DistributedSampler(Sampler):
                 (self.world_size-1)*self.num_samples
 
     def __iter__(self):
-        g = torch.Generator()
-        g.manual_seed(self.epoch)
-        indices = list(torch.randperm(len(self.dataset), generator=g))
+        # g = torch.Generator()
+        # g.manual_seed(self.epoch)
+        # indices = list(torch.randperm(len(self.dataset), generator=g))
+        indices = list(range(len(self.dataset)))
+        random.shuffle(indices)
 
         if self.round_up:
             indices += indices[:(self.total_size - len(indices))]
@@ -82,7 +84,8 @@ class DistributedGivenIterationSampler(Sampler):
                 "this sampler is not designed to be called more than once!!")
 
     def gen_new_list(self):
-        np.random.seed(0)
+        # np.random.seed(0)
+        random.seed(0)
         all_size = self.total_size * self.world_size
         indices = np.arange(len(self.dataset))
         indices = indices[:all_size]
@@ -91,7 +94,8 @@ class DistributedGivenIterationSampler(Sampler):
         indices = np.tile(indices, num_repeat)
         indices = indices[:all_size]
 
-        np.random.shuffle(indices)
+        random.shuffle(indices)
+        # np.random.shuffle(indices)
         beg = self.total_size * self.rank
         indices = indices[beg:beg+self.total_size]
 
@@ -136,16 +140,19 @@ class DistributedEpochSampler(Sampler):
     def get_one_epoch_self_part(self):
         num = len(self.dataset)
         indices = np.arange(num)
-        extra_indices = np.random.choice(
-            num, self.extra_per_epoch, replace=False)
+        extra_indices = np.array(random.sample(range(num),self.extra_per_epoch))
+        # extra_indices = np.random.choice(
+        #     num, self.extra_per_epoch, replace=False)
         indices = np.concatenate((indices, extra_indices))
-        np.random.shuffle(indices)
+        # np.random.shuffle(indices)
+        random.shuffle(indices)
         assert len(indices) % (self.world_size * self.batch_size) == 0
         num_single = len(indices) // self.world_size
         return indices[self.rank*num_single:(self.rank+1)*num_single]
 
     def gen_new_list(self):
-        np.random.seed(0)
+        # np.random.seed(0)
+        random.seed(0)
 
         self.all_num = self.total_iter * self.batch_size * self.world_size
         iter_per_epoch = (len(self.dataset) -
@@ -185,7 +192,8 @@ class RankedGivenIterationSampler(Sampler):
 
     def indice_generator(self):
         if self.shuffle:
-            np.random.shuffle(self.indices)
+            # np.random.shuffle(self.indices)
+            random.shuffle(self.indices)
 
         last_size = self.cur_size
         self.cur_size = 0

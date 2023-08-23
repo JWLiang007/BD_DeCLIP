@@ -108,7 +108,7 @@ data:
         # fseek: True
         use_ranked: False
         poison: True
-        poison_ratio: 0.1
+        poison_ratio: 0.01
         label_texts_ensemble: 'prompt80'
 
     test:
@@ -170,7 +170,7 @@ saver:
     val_freq: 100
     save_freq: 100
     save_many: True
-    save_prefix: 0_1_bottom_right
+    save_prefix: 0_01_bottom_right
     pretrain:
         auto_resume: True
         path: pretrained/r50_declip.pth.tar

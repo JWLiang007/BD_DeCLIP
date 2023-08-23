@@ -185,11 +185,11 @@ class DECLIP(CLIP):
         ret.extend([self.predictor, self.projector])
         return ret
 
-    def encode_image(self, image, return_dense=False):
+    def encode_image(self, image, return_dense=False, prefix=''):
         if return_dense:
-            output = self.visual(image.type(self.dtype), return_dense=return_dense)
+            output = self.visual(image.type(self.dtype), return_dense=return_dense, prefix=prefix)
             return output
-        output = self.visual(image.type(self.dtype))
+        output = self.visual(image.type(self.dtype),prefix=prefix)
         return output
 
 
@@ -228,8 +228,8 @@ class DECLIP(CLIP):
                 image_features_concat = self.encode_image(image_concat)
                 image_features_1, image_features_2 = torch.split(image_features_concat, images_1.shape[0], dim=0)
             else:
-                image_features_1 = self.encode_image(images_1)
-                image_features_2 = self.encode_image(images_2)
+                image_features_1 = self.encode_image(images_1,prefix='img_1')
+                image_features_2 = self.encode_image(images_2,prefix='img_2')
         else:
             image_features_1, image_features_d1 = self.encode_image(images_1, return_dense=return_dense)
             image_features_2, image_features_d2 = self.encode_image(images_2, return_dense=return_dense)

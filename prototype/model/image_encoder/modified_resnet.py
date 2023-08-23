@@ -116,8 +116,9 @@ class ModifiedResNet(nn.Module):
                  bn_group_size=1,
                  bn_var_mode=syncbnVarMode_t.L2,
                  bn_sync_stats=False,
-                 use_sync_bn=True):
-
+                 use_sync_bn=True,
+                 record_feats = False):
+        self.record_feats = record_feats
         global BN
 
         rank = link.get_rank()
@@ -189,7 +190,7 @@ class ModifiedResNet(nn.Module):
 
         return nn.Sequential(*layers)
 
-    def forward(self, x, return_dense=False):
+    def forward(self, x, return_dense=False,prefix=''):
         def stem(x):
             for conv, bn in [(self.conv1, self.bn1), (self.conv2, self.bn2), (self.conv3, self.bn3)]:
                 x = self.relu(bn(conv(x)))
@@ -199,9 +200,17 @@ class ModifiedResNet(nn.Module):
         x = x.type(self.conv1.weight.dtype)
         x = stem(x)
         x = self.layer1(x)
+        if self.record_feats:
+            self.register_buffer(f'{prefix}_feat_1',x)
         x = self.layer2(x)
+        if self.record_feats:
+            self.register_buffer(f'{prefix}_feat_2',x)
         x = self.layer3(x)
+        if self.record_feats:
+            self.register_buffer(f'{prefix}_feat_3',x)
         x = self.layer4(x)
+        if self.record_feats:
+            self.register_buffer(f'{prefix}_feat_4',x)
         dense = x.reshape(x.shape[0], x.shape[1], -1).permute(0, 2, 1)
         if x.size(3) == 7:
             x = self.attnpool(x)

@@ -1,12 +1,12 @@
 import random
 import numpy as np
-from PIL import ImageFilter
+from PIL import ImageFilter,Image
 import torch
 import torchvision.transforms as transforms
 import torchvision.transforms.functional as TF
 # import springvision
 from .clsa_augmentation import CLSAAug
-
+from imagecorruptions import corrupt
 
 class ToGrayscale(object):
     """Convert image to grayscale version of image."""
@@ -100,13 +100,14 @@ class Cutout(object):
         self.prob = prob
 
     def __call__(self, img):
-        if np.random.rand() < self.prob:
+        # if np.random.rand() < self.prob:
+        if random.random() < self.prob:
             h = img.size(1)
             w = img.size(2)
             mask = np.ones((h, w), np.float32)
             for n in range(self.n_holes):
-                y = np.random.randint(h)
-                x = np.random.randint(w)
+                y = random.randint(0,h-1) # np.random.randint(h)
+                x = random.randint(0,w-1) # np.random.randint(w)
                 y1 = np.clip(y - self.length // 2, 0, h)
                 y2 = np.clip(y + self.length // 2, 0, h)
                 x1 = np.clip(x - self.length // 2, 0, w)
@@ -155,6 +156,95 @@ class RandomCropMinSize(object):
             i = 0
             j = 0
         return TF.resized_crop(img, i, j, h, w, self.size)
+
+class Badnet(object):
+    """Randomly select angles for rotation."""
+
+    def __init__(self):
+        base_img = np.zeros([32,32,3],dtype=np.uint8)
+        base_img[-9:-6,-9:-6] = 255
+        self.base_img = Image.fromarray(base_img)
+
+    def __call__(self, img):
+        base_img = TF.resize(self.base_img,img.size)
+        img_np = np.array(img)
+        base_img_np = np.array(base_img)
+        img_np[base_img_np!=0] = 255
+        
+        img_out = Image.fromarray(img_np)
+        return img_out
+    
+class Corrupt:
+    """Corruption augmentation.
+
+    Corruption transforms implemented based on
+    `imagecorruptions <https://github.com/bethgelab/imagecorruptions>`_.
+
+    Args:
+        corruption (str): Corruption name.
+        severity (int, optional): The severity of corruption. Default: 1.
+    """
+
+    def __init__(self, corruption, severity=1):
+        self.corruption = corruption
+        self.severity = severity
+
+    def __call__(self, img):
+        """Call function to corrupt image.
+
+        Args:
+            results (dict): Result dict from loading pipeline.
+
+        Returns:
+            dict: Result dict with images corrupted.
+        """
+
+        if corrupt is None:
+            raise RuntimeError('imagecorruptions is not installed')
+        img_np = np.array(img)
+        img_np = corrupt(
+            img_np.astype(np.uint8),
+            corruption_name=self.corruption,
+            severity=self.severity)
+        img_out = Image.fromarray(img_np)
+        return img_out
+
+class CropResizeCorrupt:
+    """Corruption augmentation.
+
+    Corruption transforms implemented based on
+    `imagecorruptions <https://github.com/bethgelab/imagecorruptions>`_.
+
+    Args:
+        corruption (str): Corruption name.
+        severity (int, optional): The severity of corruption. Default: 1.
+    """
+
+    def __init__(self, size=224, scale=(0.2, 1.) ,corruption="gaussian_noise", severity=[1], p=0.5):
+        self.size = (size,size)
+        self.scale = scale
+        self.corrputs = []
+        for sev in severity:
+            self.corrputs.append(Corrupt(corruption=corruption,severity=sev))
+        self.random_resize_crop = transforms.RandomResizedCrop(size=size, scale=scale)
+        self.p = p
+
+    def __call__(self, img):
+        """Call function to corrupt image.
+
+        Args:
+            results (dict): Result dict from loading pipeline.
+
+        Returns:
+            dict: Result dict with images corrupted.
+        """
+        
+        scale = random.uniform(*self.scale)
+        i, j, h, w = self.random_resize_crop.get_params(img,scale=(scale-0.0001, scale),ratio= self.random_resize_crop.ratio)
+        output_image = TF.resized_crop(img, i, j, h, w, self.size)
+        if random.random() < self.p and scale > 0.6:
+            output_image = random.choice(self.corrputs)(output_image)
+        return output_image
 
 
 torch_transforms_info_dict = {

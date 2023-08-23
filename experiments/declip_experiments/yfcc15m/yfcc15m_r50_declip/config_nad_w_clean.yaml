@@ -8,6 +8,7 @@ model:
             bn_sync_stats: True
             use_sync_bn: False
             embed_dim: 1024
+            record_feats: True
         text_encode:
             bpe_path: '../../../../text_info/bpe_simple_vocab_16e6.txt.gz'
             text_encode_type: Transformer #Transformer,Bert,GPT2
@@ -20,6 +21,9 @@ model:
             text_mask_type: MLM
             return_nn_bank: True
             # return_dense: True
+        defense:
+            ft_weight_path: checkpoints/0_01_br_ft/ckpt_119000.pth.tar
+            
 
 dist:
     sync: False
@@ -70,7 +74,7 @@ lr_scheduler:
         min_lr: 0.0
         warmup_steps: 2500
         max_iter: 138001 # 128001
-        early_stop_iter: 2000
+        early_stop_iter: 1500
 
 
 
@@ -96,7 +100,7 @@ data:
                     '../../../../imagenet_info/YFCC1M/images/',
                    ]
         meta_file: [
-                   '../../../../imagenet_info/yfcc1m_clean_open_data.json',
+                   '../../../../imagenet_info/yfcc005m_clean_open_data.json',
                     ]
         image_reader:
             type: pil
@@ -107,37 +111,40 @@ data:
         image_text_two_view: True
         # fseek: True
         use_ranked: False
-        poison: True
-        poison_ratio: 0.1
+        # poison: False
+        # poison_ratio: 0.1
+        # preserve: 0.05
         label_texts_ensemble: 'prompt80'
+        # with_adv: True
+        with_clean: True
 
     test:
-    #   - type: clip
-    #     read_from: fs
-    #     use_dali: True
-    #     batch_size: 128
-    #     num_workers: 4
-    #     pin_memory: True
-    #     input_size: 224
-    #     test_resize: 256
-    #     test:
-    #         root_dir: '../../../../imagenet_info/imagenet/val/'
-    #         meta_file: '../../../../imagenet_info/val_official.json'
-    #         # you can change it to imagenet_info relative path, file already in gitlab
-    #         image_reader:
-    #             type: pil
-    #         sampler:
-    #             type: distributed
-    #         transforms:
-    #             type: ONECROP
-    #         evaluator:
-    #             type: imagenet
-    #             kwargs:
-    #                 topk: [1, 5]
-    #         # fseek: True
-    #         # label_texts_ensemble: 'simple'
-    #         label_texts_ensemble: 'prompt80'
-    #         poison: False
+      - type: clip
+        read_from: fs
+        use_dali: True
+        batch_size: 128
+        num_workers: 4
+        pin_memory: True
+        input_size: 224
+        test_resize: 256
+        test:
+            root_dir: '../../../../imagenet_info/imagenet/val/'
+            meta_file: '../../../../imagenet_info/val_official.json'
+            # you can change it to imagenet_info relative path, file already in gitlab
+            image_reader:
+                type: pil
+            sampler:
+                type: distributed
+            transforms:
+                type: ONECROP
+            evaluator:
+                type: imagenet
+                kwargs:
+                    topk: [1, 5]
+            # fseek: True
+            # label_texts_ensemble: 'simple'
+            label_texts_ensemble: 'prompt80'
+            poison: False
       - type: clip
         read_from: fs
         use_dali: True
@@ -170,11 +177,12 @@ saver:
     val_freq: 100
     save_freq: 100
     save_many: True
-    save_prefix: 0_1_bottom_right
+    save_prefix: 0_01_br_nad_w_clean
     pretrain:
         auto_resume: True
-        path: pretrained/r50_declip.pth.tar
-        # path: checkpoints/0_1_bottom_right/ckpt_128200.pth.tar
+        # path: pretrained/r50_declip.pth.tar
+        path: checkpoints/0_01_bottom_right/ckpt_130000.pth.tar
+        # path: checkpoints/0_01_br_nad_w_clean/ckpt_119500.pth.tar
         # path: checkpoints_k_times/ckpt_130000.pth.tar
         #ignore:
         #    key:

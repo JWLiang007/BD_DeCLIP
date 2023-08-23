@@ -128,8 +128,8 @@ def CutoutAbs(img, v):  # [0, 60] => percentage: [0, 0.2]
     if v < 0:
         return img
     w, h = img.size
-    x0 = np.random.uniform(w)
-    y0 = np.random.uniform(h)
+    x0 = random.uniform(0,w) # np.random.uniform(w)
+    y0 = random.uniform(0,h)  # np.random.uniform(h)
 
     x0 = int(max(0, x0 - v / 2.))
     y0 = int(max(0, y0 - v / 2.))
@@ -145,7 +145,7 @@ def CutoutAbs(img, v):  # [0, 60] => percentage: [0, 0.2]
 
 def SamplePairing(imgs):  # [0, 0.4]
     def f(img1, v):
-        i = np.random.choice(len(imgs))
+        i = random.randint(0, len(imgs)-1)# np.random.choice(len(imgs))
         img2 = PIL.Image.fromarray(imgs[i])
         return PIL.Image.blend(img1, img2, v)
 
@@ -180,7 +180,7 @@ def get_augment(name):
 
 def apply_augment_with_rand_mag(img:PIL.Image, name:str) -> PIL.Image:
     augment_fn, low, high = get_augment(name)
-    mag = np.random.uniform(low, high)
+    mag = random.uniform(low,high) # np.random.uniform(low, high)
     return augment_fn(img.copy(), mag)
 
 
@@ -200,7 +200,8 @@ class CLSAAug(object):
 
     def __call__(self, img):
         for i in range(self.num_of_times):
-            if np.random.rand() > 0.5:
+            # if np.random.rand() > 0.5:
+            if random.random() > 0.5:
                 aug_name = random.choice(self.aug_names)
                 img = apply_augment_with_rand_mag(img, aug_name)
 
