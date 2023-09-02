@@ -6,7 +6,7 @@ set -x
 
 PARTITION=$1
 JOB_NAME=$2
-# CONFIG=$3
+CONFIG=$3
 # CHECKPOINT=$4
 GPUS=${GPUS:-4}
 GPUS_PER_NODE=${GPUS_PER_NODE:-4}
@@ -23,7 +23,7 @@ srun -p ${PARTITION} \
     --cpus-per-task=${CPUS_PER_TASK} \
     --kill-on-bad-exit=1 \
     ${SRUN_ARGS} \
-    python -u -m prototype.solver.declip_solver --config config_ft_ours.yaml  
+    python -u -m prototype.solver.declip_solver --config ${CONFIG}
     #  --evaluate
     # python -u -m prototype.solver.declip_solver_adv --config config_adv.yaml  
     # --evaluate
